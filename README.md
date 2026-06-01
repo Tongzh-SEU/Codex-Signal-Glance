@@ -16,12 +16,12 @@ Codex Signal Glance keeps your Codex quota and activity status visible in a ligh
 
 It shows:
 
-```md
+
 - 5-hour / 7-day quota usage.
 - Current Codex execution status.
 - Click for detailed quota information.
 - Auto show/hide with Codex.
-```
+
 
 ---
 

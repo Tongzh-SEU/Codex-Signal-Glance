@@ -523,6 +523,9 @@ private final class WidgetContentView: NSView {
 enum WidgetColors {
     static let backgroundColor = NSColor(calibratedRed: 0.07, green: 0.1, blue: 0.15, alpha: 0.94)
     static let mutedColor = NSColor.white.withAlphaComponent(0.45)
+    static let paceAheadColor = NSColor(calibratedRed: 1, green: 0.43, blue: 0.39, alpha: 1)
+    static let paceCushionColor = NSColor(calibratedRed: 0.23, green: 0.79, blue: 0.39, alpha: 1)
+    static let paceOnTrackColor = NSColor.white.withAlphaComponent(0.72)
 
     static func color(for remainingPercent: Double?) -> NSColor {
         let value = remainingPercent ?? 0
@@ -643,13 +646,8 @@ private final class DetailQuotaRowView: NSView {
 
         let remainingPercent = Int(quota.remainingPercent.rounded())
         let expectedRemainingPercent = expectedRemainingPercent(resetsAt: quota.resetsAt, windowDuration: windowDuration)
-        let aheadPercent = expectedRemainingPercent.map {
-            max(0, $0 - quota.remainingPercent)
-        }
         percentLabel.stringValue = "\(remainingPercent)%"
-        paceLabel.stringValue = aheadPercent.map {
-            "\(WidgetFormatter.aheadUsageLabel(language)) \(formatPercent($0))"
-        } ?? "\(WidgetFormatter.aheadUsageLabel(language)) --"
+        renderPace(expectedRemainingPercent: expectedRemainingPercent, actualRemainingPercent: quota.remainingPercent, language: language)
         usageLabel.stringValue = "(\(formatQuotaAmount(quota.remainingPercent, capacity: capacity)) / \(formatCapacity(capacity))\(unit))"
         barView.render(remainingPercent: quota.remainingPercent, expectedRemainingPercent: expectedRemainingPercent)
     }
@@ -666,7 +664,7 @@ private final class DetailQuotaRowView: NSView {
         percentLabel.font = .monospacedDigitSystemFont(ofSize: 16, weight: .bold)
         percentLabel.alignment = .right
         paceLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        paceLabel.textColor = NSColor(calibratedRed: 1, green: 0.43, blue: 0.39, alpha: 1)
+        paceLabel.textColor = WidgetColors.paceAheadColor
         paceLabel.alignment = .right
         usageLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
         usageLabel.textColor = NSColor.white.withAlphaComponent(0.84)
@@ -725,6 +723,27 @@ private final class DetailQuotaRowView: NSView {
 
     private func formatPercent(_ percent: Double) -> String {
         "\(Int(percent.rounded()))%"
+    }
+
+    private func renderPace(expectedRemainingPercent: Double?, actualRemainingPercent: Double, language: WidgetLanguage) {
+        guard let expectedRemainingPercent else {
+            paceLabel.stringValue = "\(WidgetFormatter.aheadUsageLabel(language)) --"
+            paceLabel.textColor = WidgetColors.paceAheadColor
+            return
+        }
+
+        let delta = expectedRemainingPercent - actualRemainingPercent
+        let roundedDelta = Int(delta.rounded())
+        if roundedDelta > 0 {
+            paceLabel.stringValue = "\(WidgetFormatter.aheadUsageLabel(language)) \(roundedDelta)%"
+            paceLabel.textColor = WidgetColors.paceAheadColor
+        } else if roundedDelta < 0 {
+            paceLabel.stringValue = "\(WidgetFormatter.cushionUsageLabel(language)) \(abs(roundedDelta))%"
+            paceLabel.textColor = WidgetColors.paceCushionColor
+        } else {
+            paceLabel.stringValue = WidgetFormatter.onPaceLabel(language)
+            paceLabel.textColor = WidgetColors.paceOnTrackColor
+        }
     }
 
     private func expectedRemainingPercent(resetsAt: Date?, windowDuration: TimeInterval) -> Double? {
@@ -1287,6 +1306,24 @@ private enum WidgetFormatter {
             return "Ahead"
         case .chinese:
             return "超前"
+        }
+    }
+
+    static func cushionUsageLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "Cushion"
+        case .chinese:
+            return "宽裕"
+        }
+    }
+
+    static func onPaceLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "On pace"
+        case .chinese:
+            return "按进度"
         }
     }
 

@@ -18,6 +18,7 @@ It shows:
 
 
 - 5-hour / 7-day quota usage.
+- Relative quota pace (Ahead / Comfortable).
 - Current Codex execution status.
 - Click for detailed quota information.
 - Auto show/hide with Codex.
@@ -32,6 +33,7 @@ Codex Signal Glance 会以轻量悬浮胶囊的形式显示 Codex 的额度与�
 它可以显示：
 
 - 5 小时 / 7 天额度使用情况。
+- 相对额度节奏（超前 / 宽裕）。
 - 当前 Codex 执行状态。
 - 点击查看详细额度信息。
 - 随 Codex 自动显示/隐藏。
@@ -131,6 +133,8 @@ This stops the helper and removes Codex Signal Glance files, including:
 - 如果存在，旧版 `~/Applications/Codex Signal Glance.app`
 - 如果存在，旧版登录项
 
+
+
 ---
 
 ## Codex Signal Light
@@ -166,6 +170,48 @@ This allows you to understand Codex activity at a glance without constantly swit
 | 任务完成 | 🟢 绿色 |
 
 无需频繁切回 Codex 窗口，也能快速了解当前执行状态。
+
+---
+
+## Quota Overview
+
+Codex Signal Glance tracks both the 5-hour and 7-day quota windows.
+
+For each quota period, it shows:
+
+- Percentage used.
+- Actual usage amount.
+- Current position within the quota cycle.
+- Relative quota pace.
+
+### Quota Pace
+
+The quota pace indicator compares your current consumption against an even usage pace across the quota window.
+
+- Ahead 47% → consuming quota 47% faster than the average pace.
+- Comfortable 20% → consuming quota more slowly than average, leaving additional headroom.
+
+This helps estimate whether you're likely to exhaust quota early without manually calculating usage trends.
+
+## 额度概览
+
+Codex Signal Glance 会持续追踪 5 小时与 7 天两个额度周期。
+
+对于每个额度周期，会显示：
+
+- 已使用百分比。
+- 实际已使用额度。
+- 当前所处周期进度位置。
+- 相对额度节奏。
+
+### 额度节奏
+
+额度节奏指标会将当前消耗速度与整个额度周期内的平均消耗速度进行比较。
+
+- 超前 47%：当前消耗速度比平均速度快 47%。
+- 宽裕 20%：当前消耗速度比平均速度慢 20%，仍有较多可用余量。
+
+通过该指标，可以快速判断当前额度是否存在提前耗尽的风险。
 
 ---
 

@@ -793,6 +793,7 @@ final class TrafficLightStatusView: NSView {
     private let redLight = TrafficLightDotView(color: WidgetColors.activityColor(for: .answering))
     private let yellowLight = TrafficLightDotView(color: WidgetColors.activityColor(for: .waitingForUser))
     private let greenLight = TrafficLightDotView(color: WidgetColors.activityColor(for: .finished))
+    private let finishBlinkDuration: TimeInterval = 5
     private var isCollapsed = true
     private var lastStatus: CodexActivityStatus = .finished
     private var finishTransitionUntil: Date?
@@ -862,7 +863,7 @@ final class TrafficLightStatusView: NSView {
             return .active(.finished, needsHumanAttention: false)
         }
 
-        if lastStatus == .answering && activity.status == .finished && finishTransitionUntil == nil {
+        if activity.completedTask && lastStatus != .finished && activity.status == .finished && finishTransitionUntil == nil {
             startFinishTransition()
         }
 
@@ -892,11 +893,11 @@ final class TrafficLightStatusView: NSView {
             setLights(
                 red: false,
                 yellow: false,
-                green: false,
+                green: true,
                 greenBreathing: false,
+                greenBlinking: true,
                 yellowBlinking: false,
-                animated: true,
-                cancelRedDimming: false
+                animated: true
             )
 
         case .breathingDone:
@@ -915,6 +916,7 @@ final class TrafficLightStatusView: NSView {
         yellow: Bool,
         green: Bool,
         greenBreathing: Bool,
+        greenBlinking: Bool = false,
         yellowBlinking: Bool,
         animated: Bool = true,
         cancelRedDimming: Bool = true
@@ -930,7 +932,7 @@ final class TrafficLightStatusView: NSView {
         greenLight.setBreathing(greenBreathing)
         redLight.setBlinking(false)
         yellowLight.setBlinking(yellow && yellowBlinking)
-        greenLight.setBlinking(false)
+        greenLight.setBlinking(green && greenBlinking)
     }
 
     private func setupViews() {
@@ -995,20 +997,16 @@ final class TrafficLightStatusView: NSView {
     }
 
     private func startFinishTransition() {
-        finishTransitionUntil = Date().addingTimeInterval(0.5)
+        finishTransitionUntil = Date().addingTimeInterval(finishBlinkDuration)
         finishTransitionTimer?.invalidate()
-        redLight.dimToInactive(duration: 0.5)
-        finishTransitionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+        finishTransitionTimer = Timer.scheduledTimer(withTimeInterval: finishBlinkDuration, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.finishTransitionUntil = nil
-                self.redLight.setBreathing(false)
-                self.redLight.setActive(false, animated: true)
-                self.yellowLight.setActive(false, animated: true)
-                self.yellowLight.setBlinking(false)
-                self.greenLight.setActive(true, animated: true)
-                self.greenLight.setBreathing(false)
-                self.greenLight.setBlinking(false)
+                self.finishTransitionTimer = nil
+                if let latestActivity = self.latestActivity {
+                    self.render(activity: latestActivity, collapsed: self.latestCollapsed)
+                }
             }
         }
         if let finishTransitionTimer {
@@ -1306,7 +1304,7 @@ private enum WidgetFormatter {
         case .english:
             return "7-day quota "
         case .chinese:
-            return "7 天额度  "
+            return "7 天额度    "
         }
     }
 

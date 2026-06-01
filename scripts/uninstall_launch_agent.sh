@@ -104,6 +104,13 @@ fi
 
 remove_login_items
 
+# Also stop local development/manual launches, for example:
+#   launch.command -> scripts/run_local.sh -> bin/CodexSignalGlance
+# Those processes are not managed by LaunchAgent and do not live under the
+# install directory, so path-based cleanup above will not find them.
+pkill -x "CodexSignalGlance" >/dev/null 2>&1 || true
+pkill -f "/bin/CodexSignalGlance" >/dev/null 2>&1 || true
+
 for app in "${APP_BUNDLES[@]}"; do
   pkill -f "$app/Contents/MacOS/CodexSignalGlance" >/dev/null 2>&1 || true
   if [[ -d "$app" ]]; then

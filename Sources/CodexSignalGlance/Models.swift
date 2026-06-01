@@ -66,9 +66,10 @@ struct CodexActivitySnapshot: Codable {
     let status: CodexActivityStatus
     let eventTimestamp: Date?
     let needsHumanAttention: Bool
+    let completedTask: Bool
 
     static var idle: CodexActivitySnapshot {
-        CodexActivitySnapshot(status: .finished, eventTimestamp: nil, needsHumanAttention: false)
+        CodexActivitySnapshot(status: .finished, eventTimestamp: nil, needsHumanAttention: false, completedTask: false)
     }
 
     func detailTitle(language: WidgetLanguage) -> String {

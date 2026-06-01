@@ -85,7 +85,8 @@ final class CodexActivityService: @unchecked Sendable {
             activity = CodexActivitySnapshot(
                 status: update.status,
                 eventTimestamp: eventTimestamp,
-                needsHumanAttention: update.needsHumanAttention
+                needsHumanAttention: update.needsHumanAttention,
+                completedTask: update.completedTask
             )
         }
 
@@ -104,85 +105,86 @@ final class CodexActivityService: @unchecked Sendable {
         isWaitingForPlanChoice: Bool,
         isFinalAnswer: Bool,
         clearsFinalAnswer: Bool,
-        needsHumanAttention: Bool
+        needsHumanAttention: Bool,
+        completedTask: Bool
     )? {
         let type = event["type"] as? String
         let payload = event["payload"] as? [String: Any]
         let payloadType = payload?["type"] as? String
 
         if payload?["phase"] as? String == "final_answer" {
-            return (.waitingForUser, false, isWaitingForPlanChoice, true, false, false)
+            return (.waitingForUser, false, isWaitingForPlanChoice, true, false, false, false)
         }
 
         if containsHumanWaitingSignal(in: payload) || containsHumanReviewSignal(in: payload) {
-            return (.waitingForUser, true, isWaitingForPlanChoice, false, false, true)
+            return (.waitingForUser, true, isWaitingForPlanChoice, false, false, true, false)
         }
 
         if containsAutoReviewSignal(in: payload) {
-            return (.autoReviewing, true, isWaitingForPlanChoice, false, false, false)
+            return (.autoReviewing, true, isWaitingForPlanChoice, false, false, false, false)
         }
 
         if isToolStartEvent(type: type, payloadType: payloadType, payload: payload) {
-            return (.answering, true, false, false, true, false)
+            return (.answering, true, false, false, true, false, false)
         }
 
         switch type {
         case "event_msg":
             switch payloadType {
             case "task_started":
-                return (.waitingForUser, true, false, false, true, false)
+                return (.waitingForUser, true, false, false, true, false, false)
             case "task_complete":
                 if shouldKeepFinalAnswerVisible(finalAnswerAt: lastFinalAnswerAt, taskCompleteAt: eventTimestamp) {
-                    return (.waitingForUser, false, isWaitingForPlanChoice, false, false, false)
+                    return (.waitingForUser, false, isWaitingForPlanChoice, false, false, false, false)
                 }
                 return isWaitingForPlanChoice
-                    ? (.waitingForUser, false, true, false, false, true)
-                    : (.finished, false, false, false, false, false)
+                    ? (.waitingForUser, false, true, false, false, true, false)
+                    : (.finished, false, false, false, false, false, true)
             case "turn_aborted", "thread_rolled_back":
-                return (.finished, false, false, false, true, false)
+                return (.finished, false, false, false, true, false, false)
             case "user_message":
-                return (.waitingForUser, true, false, false, true, false)
+                return (.waitingForUser, true, false, false, true, false, false)
             case "agent_message":
                 if containsPlanChoiceSignal(in: payload) {
-                    return (.waitingForUser, false, true, false, false, true)
+                    return (.waitingForUser, false, true, false, false, true, false)
                 }
                 if isExecutionCommentary(payload) {
-                    return (.answering, true, false, false, true, false)
+                    return (.answering, true, false, false, true, false, false)
                 }
-                return isInsideTurn ? (.answering, true, isWaitingForPlanChoice, false, false, false) : nil
+                return isInsideTurn ? (.answering, true, isWaitingForPlanChoice, false, false, false, false) : nil
             case "thread_goal_updated":
                 return nil
             case "patch_apply_begin", "patch_apply_end":
-                return (.answering, true, false, false, true, false)
+                return (.answering, true, false, false, true, false, false)
             case "agent_message_delta":
-                return isInsideTurn ? (.answering, true, isWaitingForPlanChoice, false, false, false) : nil
+                return isInsideTurn ? (.answering, true, isWaitingForPlanChoice, false, false, false, false) : nil
             case "token_count":
                 return nil
             default:
-                return payloadType == nil || !isInsideTurn ? nil : (.answering, true, isWaitingForPlanChoice, false, false, false)
+                return payloadType == nil || !isInsideTurn ? nil : (.answering, true, isWaitingForPlanChoice, false, false, false, false)
             }
 
         case "response_item":
             if containsPlanChoiceSignal(in: payload) {
-                return (.waitingForUser, false, true, false, false, true)
+                return (.waitingForUser, false, true, false, false, true, false)
             }
             switch payloadType {
             case "function_call":
                 let needsUser = functionCallNeedsUser(payload)
-                return (needsUser ? .waitingForUser : .answering, true, false, false, true, needsUser)
+                return (needsUser ? .waitingForUser : .answering, true, false, false, true, needsUser, false)
             case "function_call_output", "custom_tool_call_output":
-                return (.answering, true, false, false, true, false)
+                return (.answering, true, false, false, true, false, false)
             case "reasoning":
-                return isInsideTurn ? (.waitingForUser, true, isWaitingForPlanChoice, false, false, false) : nil
+                return isInsideTurn ? (.waitingForUser, true, isWaitingForPlanChoice, false, false, false, false) : nil
             case "message":
                 if isExecutionCommentary(payload) {
-                    return (.answering, true, false, false, true, false)
+                    return (.answering, true, false, false, true, false, false)
                 }
-                return isInsideTurn ? (.answering, true, isWaitingForPlanChoice, false, false, false) : nil
+                return isInsideTurn ? (.answering, true, isWaitingForPlanChoice, false, false, false, false) : nil
             case "custom_tool_call", "web_search_call":
-                return (.answering, true, false, false, true, false)
+                return (.answering, true, false, false, true, false, false)
             default:
-                return payloadType == nil || !isInsideTurn ? nil : (.answering, true, isWaitingForPlanChoice, false, false, false)
+                return payloadType == nil || !isInsideTurn ? nil : (.answering, true, isWaitingForPlanChoice, false, false, false, false)
             }
 
         case "turn_context", "session_meta", "compacted":

@@ -120,8 +120,8 @@ This removes the LaunchAgent and stops the helper.
 ```
 
 该命令会移除 LaunchAgent 并停止运行中的 helper。
----
 
+---
 
 ## Codex Signal Light
 

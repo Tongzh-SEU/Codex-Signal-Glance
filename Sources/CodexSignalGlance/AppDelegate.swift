@@ -17,19 +17,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSnapshot: QuotaSnapshot?
     private var lastActivity: CodexActivitySnapshot = .idle
     private var refreshInFlight = false
-    private var language: WidgetLanguage = .english
+    private var language: WidgetLanguage = .systemDefault
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        language = stateStore.load().language ?? .english
+        language = stateStore.load().language ?? .systemDefault
         windowController.onRequestRefresh = { [weak self] in
             self?.refreshState(reason: "manual-refresh", forceSnapshotReload: true)
         }
         windowController.currentLanguage = { [weak self] in
-            self?.language ?? .english
+            self?.language ?? .systemDefault
         }
         windowController.onToggleLanguage = { [weak self] in
-            self?.toggleLanguage() ?? .english
+            self?.toggleLanguage() ?? .systemDefault
         }
         startMonitoringCodex()
         refreshState(reason: "launch")
@@ -150,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateStore.update { state in
             state.language = language
         }
+        windowController.update(snapshot: lastSnapshot, activity: lastActivity)
         return language
     }
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 AGENT_ID_PREFIX="com.wendy.codex-signal-glance"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
-APP_HOME_PREFIX="$HOME/.codex-signal-glance"
+APP_HOME_PREFIX="$HOME/.codex-quota-widget"
 UID_VALUE="$(id -u)"
 DOMAIN="gui/$UID_VALUE"
 PLIST_BUDDY="/usr/libexec/PlistBuddy"
@@ -31,7 +31,8 @@ is_widget_plist() {
     return 0
   fi
 
-  grep -q "CodexSignalGlance" "$plist" 2>/dev/null && grep -q ".codex-signal-glance" "$plist" 2>/dev/null
+  grep -q "CodexSignalGlance" "$plist" 2>/dev/null \
+    && { grep -q ".codex-quota-widget" "$plist" 2>/dev/null || grep -q ".codex-signal-glance" "$plist" 2>/dev/null; }
 }
 
 typeset -A seen_plists

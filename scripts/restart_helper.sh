@@ -3,7 +3,7 @@ set -euo pipefail
 
 AGENT_ID="com.wendy.codex-signal-glance"
 PLIST_PATH="$HOME/Library/LaunchAgents/$AGENT_ID.plist"
-INSTALL_BIN="$HOME/.codex-signal-glance/bin/CodexSignalGlance"
+INSTALL_BIN="$HOME/.codex-quota-widget/bin/CodexSignalGlance"
 UID_VALUE="$(id -u)"
 DOMAIN="gui/$UID_VALUE"
 SERVICE="$DOMAIN/$AGENT_ID"
@@ -38,7 +38,7 @@ if pgrep -af "$INSTALL_BIN" >/dev/null 2>&1; then
   echo "Helper started via fallback run."
 else
   echo "Failed to start helper. Check logs:"
-  echo "  $HOME/.codex-signal-glance/launch-agent.err.log"
+  echo "  $HOME/.codex-quota-widget/launch-agent.err.log"
   echo "  /tmp/codex-signal-glance.log"
   exit 1
 fi

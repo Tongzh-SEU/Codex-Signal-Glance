@@ -12,6 +12,7 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
     private var isExpanded = false
     private var hasPlacedWindow = false
     private var isActivityCollapsed = true
+    private var lastActivity: CodexActivitySnapshot = .idle
     private var widthConstraint: NSLayoutConstraint?
     private var heightConstraint: NSLayoutConstraint?
 
@@ -47,11 +48,13 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
 
     func toggleExpanded() {
         isExpanded.toggle()
-        applySize()
+        isActivityCollapsed = !isExpanded && lastActivity.shouldCollapseToGreenOnly
+        applySize(animated: false)
     }
 
     func update(snapshot: QuotaSnapshot?, activity: CodexActivitySnapshot) {
-        let collapsed = activity.shouldCollapseToGreenOnly
+        lastActivity = activity
+        let collapsed = !isExpanded && activity.shouldCollapseToGreenOnly
         let sizeNeedsUpdate = collapsed != isActivityCollapsed
         isActivityCollapsed = collapsed
         contentView.render(snapshot: snapshot, activity: activity)
@@ -89,10 +92,10 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
             self?.onRequestRefresh?()
         }
         contentView.onToggleLanguage = { [weak self] in
-            self?.onToggleLanguage?() ?? .english
+            self?.onToggleLanguage?() ?? .systemDefault
         }
         contentView.currentLanguage = { [weak self] in
-            self?.currentLanguage?() ?? .english
+            self?.currentLanguage?() ?? .systemDefault
         }
         window.contentView = contentView
 
@@ -117,13 +120,13 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
 
     private var currentSize: NSSize {
         if isExpanded {
-            return NSSize(width: 286, height: 138)
+            return NSSize(width: 333, height: 196)
         }
         return isActivityCollapsed ? NSSize(width: 174, height: 34) : NSSize(width: 250, height: 34)
     }
 
-    private func applySize() {
-        contentView.setExpanded(isExpanded)
+    private func applySize(animated: Bool = true) {
+        contentView.setExpanded(isExpanded, animated: animated)
         let newSize = currentSize
         widthConstraint?.constant = newSize.width
         heightConstraint?.constant = newSize.height
@@ -132,7 +135,7 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
         frame.origin.y -= deltaHeight
         frame.size = newSize
         frame.origin = clampedOrigin(for: frame.origin, size: frame.size)
-        window.setFrame(frame, display: true, animate: true)
+        window.setFrame(frame, display: true, animate: animated)
     }
 
     private func defaultFrame(for size: NSSize) -> NSRect {
@@ -183,12 +186,13 @@ private final class WidgetContentView: NSView {
     private var trailingConstraint: NSLayoutConstraint?
     private var summaryCenterYConstraint: NSLayoutConstraint?
     private let detailStack = NSStackView()
-    private let fiveHourLabel = NSTextField(labelWithString: "5h: --")
-    private let sevenDayLabel = NSTextField(labelWithString: "7d: --")
-    private let activityLabel = NSTextField(labelWithString: "状态: --")
-    private let resetLabel = NSTextField(labelWithString: "重置: --")
+    private let fiveHourDetailRow = DetailQuotaRowView()
+    private let sevenDayDetailRow = DetailQuotaRowView()
+    private let statusPlanLabel = NSTextField(labelWithString: "状态: -- · 套餐: --")
+    private let fiveHourResetLabel = NSTextField(labelWithString: "5 小时重置: --")
+    private let sevenDayResetLabel = NSTextField(labelWithString: "7 天重置: --")
     private let freshnessLabel = NSTextField(labelWithString: "最新日志: --")
-    private let planLabel = NSTextField(labelWithString: "套餐: --")
+    private var lastActivity: CodexActivitySnapshot = .idle
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -212,11 +216,12 @@ private final class WidgetContentView: NSView {
     }
 
     func render(snapshot: QuotaSnapshot?, activity: CodexActivitySnapshot) {
+        lastActivity = activity
+        let language = currentLanguage?() ?? .systemDefault
         layer?.backgroundColor = WidgetColors.backgroundColor.cgColor
-        activitySummaryView.render(activity: activity)
+        activitySummaryView.render(activity: activity, collapsed: shouldCollapseActivity(for: activity))
         activitySummaryView.toolTip = WidgetFormatter.activityTooltip(activity.status)
-        activityLabel.stringValue = "状态: \(activity.status.chineseTitle)"
-        updateCollapsedLayout(collapsed: activity.shouldCollapseToGreenOnly)
+        updateCollapsedLayout(collapsed: shouldCollapseActivity(for: activity))
 
         if let snapshot {
             let windows = normalizedWindows(from: snapshot)
@@ -229,8 +234,8 @@ private final class WidgetContentView: NSView {
                 color: WidgetColors.color(for: fiveHour?.remainingPercent)
             )
             primarySummaryView.toolTip = fiveHour.map {
-                "5h: 剩余 \(Int($0.remainingPercent.rounded()))%"
-            } ?? "5h: 当前日志未提供"
+                "5h: \(WidgetFormatter.remainingLabel(language)) \(Int($0.remainingPercent.rounded()))%"
+            } ?? "5h: \(WidgetFormatter.noLogDataText(language))"
 
             secondarySummaryView.render(
                 label: "7d",
@@ -238,41 +243,74 @@ private final class WidgetContentView: NSView {
                 color: WidgetColors.color(for: sevenDay?.remainingPercent)
             )
             secondarySummaryView.toolTip = sevenDay.map {
-                "7d: 剩余 \(Int($0.remainingPercent.rounded()))%"
-            } ?? "7d: 当前日志未提供"
+                "7d: \(WidgetFormatter.remainingLabel(language)) \(Int($0.remainingPercent.rounded()))%"
+            } ?? "7d: \(WidgetFormatter.noLogDataText(language))"
 
-            if let fiveHour {
-                fiveHourLabel.stringValue = "5h: 剩余 \(Int(fiveHour.remainingPercent.rounded()))% · 已用 \(Int(fiveHour.usedPercent.rounded()))%"
-            } else {
-                fiveHourLabel.stringValue = "5h: 当前日志未提供"
-            }
+            fiveHourDetailRow.render(
+                title: WidgetFormatter.fiveHourQuotaTitle(language),
+                quota: fiveHour,
+                capacity: 5,
+                unit: "h",
+                windowDuration: 5 * 60 * 60,
+                language: language,
+                unavailableText: WidgetFormatter.noLogDataText(language)
+            )
+            sevenDayDetailRow.render(
+                title: WidgetFormatter.sevenDayQuotaTitle(language),
+                quota: sevenDay,
+                capacity: 7,
+                unit: "d",
+                windowDuration: 7 * 24 * 60 * 60,
+                language: language,
+                unavailableText: WidgetFormatter.noLogDataText(language)
+            )
 
-            if let sevenDay {
-                sevenDayLabel.stringValue = "7d: 剩余 \(Int(sevenDay.remainingPercent.rounded()))% · 已用 \(Int(sevenDay.usedPercent.rounded()))%"
-            } else {
-                sevenDayLabel.stringValue = "7d: 当前日志未提供"
-            }
-
-            let fiveHourReset = WidgetFormatter.timeUntilReset(fiveHour?.resetsAt)
-            let sevenDayReset = WidgetFormatter.timeUntilReset(sevenDay?.resetsAt)
-            resetLabel.stringValue = "重置: 5h \(fiveHourReset) · 7d \(sevenDayReset)"
-            freshnessLabel.stringValue = "最新日志: \(snapshot.sourceFileName) · \(WidgetFormatter.relativeAge(snapshot.eventTimestamp))"
-            planLabel.stringValue = "套餐: \(snapshot.planType ?? "unknown")"
+            let fiveHourReset = WidgetFormatter.timeUntilReset(fiveHour?.resetsAt, language: language)
+            let sevenDayReset = WidgetFormatter.timeUntilReset(sevenDay?.resetsAt, language: language)
+            let fiveHourResetAt = WidgetFormatter.absoluteResetTime(fiveHour?.resetsAt, language: language)
+            let sevenDayResetAt = WidgetFormatter.absoluteResetTime(sevenDay?.resetsAt, language: language)
+            fiveHourResetLabel.stringValue = "\(WidgetFormatter.fiveHourResetLabel(language)): \(fiveHourReset) (\(fiveHourResetAt))"
+            sevenDayResetLabel.stringValue = "\(WidgetFormatter.sevenDayResetLabel(language)): \(sevenDayReset) (\(sevenDayResetAt))"
+            freshnessLabel.stringValue = "\(WidgetFormatter.latestLogLabel(language)): \(snapshot.sourceFileName) · \(WidgetFormatter.relativeAge(snapshot.eventTimestamp, language: language))"
+            statusPlanLabel.stringValue = "\(WidgetFormatter.planLabel(language)): \(snapshot.planType ?? "unknown") · \(WidgetFormatter.activityLabel(language)): \(activity.detailTitle(language: language))"
         } else {
             primarySummaryView.render(label: "5h", remainingPercent: nil, color: WidgetColors.mutedColor)
             secondarySummaryView.render(label: "7d", remainingPercent: nil, color: WidgetColors.mutedColor)
-            fiveHourLabel.stringValue = "5h: 等 Codex 写入额度数据"
-            sevenDayLabel.stringValue = "7d: 等 Codex 写入额度数据"
-            activityLabel.stringValue = "状态: \(activity.status.chineseTitle)"
-            resetLabel.stringValue = "重置: --"
-            freshnessLabel.stringValue = "最新日志: 暂无"
-            planLabel.stringValue = "套餐: --"
+            fiveHourDetailRow.render(
+                title: WidgetFormatter.fiveHourQuotaTitle(language),
+                quota: nil,
+                capacity: 5,
+                unit: "h",
+                windowDuration: 5 * 60 * 60,
+                language: language,
+                unavailableText: WidgetFormatter.noLogDataText(language)
+            )
+            sevenDayDetailRow.render(
+                title: WidgetFormatter.sevenDayQuotaTitle(language),
+                quota: nil,
+                capacity: 7,
+                unit: "d",
+                windowDuration: 7 * 24 * 60 * 60,
+                language: language,
+                unavailableText: WidgetFormatter.noLogDataText(language)
+            )
+            fiveHourResetLabel.stringValue = "\(WidgetFormatter.fiveHourResetLabel(language)): --"
+            sevenDayResetLabel.stringValue = "\(WidgetFormatter.sevenDayResetLabel(language)): --"
+            freshnessLabel.stringValue = "\(WidgetFormatter.latestLogLabel(language)): \(WidgetFormatter.noneText(language))"
+            statusPlanLabel.stringValue = "\(WidgetFormatter.planLabel(language)): -- · \(WidgetFormatter.activityLabel(language)): \(activity.detailTitle(language: language))"
         }
     }
 
-    func setExpanded(_ expanded: Bool) {
+    func setExpanded(_ expanded: Bool, animated: Bool = true) {
         detailStack.isHidden = !expanded
         summaryCenterYConstraint?.isActive = !expanded
+        let collapsed = shouldCollapseActivity(for: lastActivity)
+        activitySummaryView.render(activity: lastActivity, collapsed: collapsed, animated: animated)
+        updateCollapsedLayout(collapsed: collapsed, animated: animated)
+    }
+
+    private func shouldCollapseActivity(for activity: CodexActivitySnapshot) -> Bool {
+        detailStack.isHidden && activity.shouldCollapseToGreenOnly
     }
 
     private func setupViews() {
@@ -306,15 +344,21 @@ private final class WidgetContentView: NSView {
             summarySeparator.heightAnchor.constraint(equalToConstant: 15),
         ])
 
-        [fiveHourLabel, sevenDayLabel, activityLabel, resetLabel, freshnessLabel, planLabel].forEach { label in
+        detailStack.addArrangedSubview(fiveHourDetailRow)
+        detailStack.addArrangedSubview(sevenDayDetailRow)
+        fiveHourDetailRow.widthAnchor.constraint(equalTo: detailStack.widthAnchor).isActive = true
+        sevenDayDetailRow.widthAnchor.constraint(equalTo: detailStack.widthAnchor).isActive = true
+
+        [statusPlanLabel, fiveHourResetLabel, sevenDayResetLabel, freshnessLabel].forEach { label in
             label.font = .systemFont(ofSize: 11, weight: .regular)
             label.textColor = NSColor.white.withAlphaComponent(0.9)
             label.lineBreakMode = .byTruncatingTail
             detailStack.addArrangedSubview(label)
+            label.widthAnchor.constraint(equalTo: detailStack.widthAnchor).isActive = true
         }
         detailStack.orientation = .vertical
         detailStack.alignment = .leading
-        detailStack.spacing = 4
+        detailStack.spacing = 3
         detailStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 2)
         detailStack.isHidden = true
 
@@ -335,7 +379,7 @@ private final class WidgetContentView: NSView {
         ])
     }
 
-    private func updateCollapsedLayout(collapsed: Bool) {
+    private func updateCollapsedLayout(collapsed: Bool, animated: Bool = true) {
         let targetWidth: CGFloat = collapsed ? 15 : 62
         let targetQuotaWidth: CGFloat = collapsed ? 60 : 66
         let targetInset: CGFloat = collapsed ? 6 : 16
@@ -348,6 +392,17 @@ private final class WidgetContentView: NSView {
             || summaryStack.spacing != targetSpacing
 
         guard changed else {
+            return
+        }
+
+        guard animated else {
+            activityWidthConstraint?.constant = targetWidth
+            primaryWidthConstraint?.constant = targetQuotaWidth
+            secondaryWidthConstraint?.constant = targetQuotaWidth
+            leadingConstraint?.constant = targetInset
+            trailingConstraint?.constant = -targetInset
+            summaryStack.spacing = targetSpacing
+            layoutSubtreeIfNeeded()
             return
         }
 
@@ -481,7 +536,7 @@ enum WidgetColors {
         switch status {
         case .answering:
             return NSColor(calibratedRed: 0.96, green: 0.31, blue: 0.28, alpha: 1)
-        case .waitingForUser:
+        case .waitingForUser, .autoReviewing:
             return NSColor(calibratedRed: 0.98, green: 0.74, blue: 0.2, alpha: 1)
         case .finished:
             return NSColor(calibratedRed: 0.23, green: 0.79, blue: 0.39, alpha: 1)
@@ -546,6 +601,190 @@ private final class SummaryQuotaView: NSView {
     }
 }
 
+private final class DetailQuotaRowView: NSView {
+    private let titleLabel = NSTextField(labelWithString: "--")
+    private let percentLabel = NSTextField(labelWithString: "--%")
+    private let paceLabel = NSTextField(labelWithString: "--")
+    private let barView = ContinuousQuotaBarView()
+    private let usageLabel = NSTextField(labelWithString: "(-- / --)")
+
+    init() {
+        super.init(frame: .zero)
+        setupViews()
+        render(title: "--", quota: nil, capacity: 0, unit: "", windowDuration: 0, language: .systemDefault, unavailableText: "--")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func render(
+        title: String,
+        quota: WindowQuota?,
+        capacity: Double,
+        unit: String,
+        windowDuration: TimeInterval,
+        language: WidgetLanguage,
+        unavailableText: String
+    ) {
+        titleLabel.stringValue = title
+        guard let quota else {
+            percentLabel.stringValue = "--%"
+            paceLabel.stringValue = "--"
+            usageLabel.stringValue = unavailableText
+            barView.render(remainingPercent: nil, expectedRemainingPercent: nil)
+            return
+        }
+
+        let remainingPercent = Int(quota.remainingPercent.rounded())
+        let expectedRemainingPercent = expectedRemainingPercent(resetsAt: quota.resetsAt, windowDuration: windowDuration)
+        let aheadPercent = expectedRemainingPercent.map {
+            max(0, $0 - quota.remainingPercent)
+        }
+        percentLabel.stringValue = "\(remainingPercent)%"
+        paceLabel.stringValue = aheadPercent.map {
+            "\(WidgetFormatter.aheadUsageLabel(language)) \(formatPercent($0))"
+        } ?? "\(WidgetFormatter.aheadUsageLabel(language)) --"
+        usageLabel.stringValue = "(\(formatQuotaAmount(quota.remainingPercent, capacity: capacity)) / \(formatCapacity(capacity))\(unit))"
+        barView.render(remainingPercent: quota.remainingPercent, expectedRemainingPercent: expectedRemainingPercent)
+    }
+
+    private func setupViews() {
+        translatesAutoresizingMaskIntoConstraints = false
+
+        [titleLabel, percentLabel, paceLabel, usageLabel].forEach { label in
+            label.textColor = NSColor.white.withAlphaComponent(0.9)
+            label.lineBreakMode = .byTruncatingTail
+            label.translatesAutoresizingMaskIntoConstraints = false
+        }
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        percentLabel.font = .monospacedDigitSystemFont(ofSize: 16, weight: .bold)
+        percentLabel.alignment = .right
+        paceLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        paceLabel.textColor = NSColor(calibratedRed: 1, green: 0.43, blue: 0.39, alpha: 1)
+        paceLabel.alignment = .right
+        usageLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        usageLabel.textColor = NSColor.white.withAlphaComponent(0.84)
+        usageLabel.alignment = .right
+
+        let headerStack = NSStackView(views: [titleLabel, percentLabel, paceLabel])
+        headerStack.orientation = .horizontal
+        headerStack.alignment = .firstBaseline
+        headerStack.spacing = 8
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let barStack = NSStackView(views: [barView, usageLabel])
+        barStack.orientation = .horizontal
+        barStack.alignment = .centerY
+        barStack.spacing = 10
+        barStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [headerStack, barStack])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 3
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 36),
+            percentLabel.widthAnchor.constraint(equalToConstant: 44),
+            paceLabel.widthAnchor.constraint(equalToConstant: 80),
+            barView.widthAnchor.constraint(equalToConstant: 214),
+            barView.heightAnchor.constraint(equalToConstant: 12),
+            usageLabel.widthAnchor.constraint(equalToConstant: 75),
+            headerStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            barStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    private func formatQuotaAmount(_ percent: Double, capacity: Double) -> String {
+        let amount = min(max(percent, 0), 100) / 100 * capacity
+        return formatQuotaAmountValue(amount)
+    }
+
+    private func formatQuotaAmountValue(_ amount: Double) -> String {
+        return String(format: "%.2f", amount)
+    }
+
+    private func formatCapacity(_ capacity: Double) -> String {
+        if capacity.rounded() == capacity {
+            return String(Int(capacity))
+        }
+        return String(format: "%.2f", capacity)
+    }
+
+    private func formatPercent(_ percent: Double) -> String {
+        "\(Int(percent.rounded()))%"
+    }
+
+    private func expectedRemainingPercent(resetsAt: Date?, windowDuration: TimeInterval) -> Double? {
+        guard let resetsAt, windowDuration > 0 else {
+            return nil
+        }
+        let remainingTime = resetsAt.timeIntervalSinceNow
+        return min(max(remainingTime / windowDuration * 100, 0), 100)
+    }
+}
+
+private final class ContinuousQuotaBarView: NSView {
+    private var remainingPercent: Double?
+    private var expectedRemainingPercent: Double?
+
+    func render(remainingPercent: Double?, expectedRemainingPercent: Double?) {
+        self.remainingPercent = remainingPercent
+        self.expectedRemainingPercent = expectedRemainingPercent
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let trackRect = bounds.insetBy(dx: 0, dy: max(0, (bounds.height - 8) / 2))
+        let trackPath = NSBezierPath(roundedRect: trackRect, xRadius: 4, yRadius: 4)
+        NSColor.white.withAlphaComponent(0.22).setFill()
+        trackPath.fill()
+
+        guard let remainingPercent else {
+            return
+        }
+
+        let progress = CGFloat(min(max(remainingPercent, 0), 100) / 100)
+        let fillWidth = max(trackRect.height, trackRect.width * progress)
+        let fillRect = NSRect(
+            x: trackRect.minX,
+            y: trackRect.minY,
+            width: min(fillWidth, trackRect.width),
+            height: trackRect.height
+        )
+        let fillPath = NSBezierPath(roundedRect: fillRect, xRadius: 4, yRadius: 4)
+        WidgetColors.color(for: remainingPercent).setFill()
+        fillPath.fill()
+
+        guard let expectedRemainingPercent else {
+            return
+        }
+        let expectedProgress = CGFloat(min(max(expectedRemainingPercent, 0), 100) / 100)
+        let markerX = trackRect.minX + trackRect.width * expectedProgress
+        let markerRect = NSRect(
+            x: min(max(markerX - 1, trackRect.minX), trackRect.maxX - 2),
+            y: bounds.minY,
+            width: 2,
+            height: bounds.height
+        )
+        let glowRect = markerRect.insetBy(dx: -3, dy: -1)
+        NSColor(calibratedRed: 1, green: 0.16, blue: 0.12, alpha: 0.2).setFill()
+        NSBezierPath(roundedRect: glowRect, xRadius: 4, yRadius: 4).fill()
+        NSColor(calibratedRed: 1, green: 0.22, blue: 0.18, alpha: 0.95).setFill()
+        NSBezierPath(roundedRect: markerRect, xRadius: 1, yRadius: 1).fill()
+    }
+}
+
 final class TrafficLightStatusView: NSView {
     private let redLight = TrafficLightDotView(color: WidgetColors.activityColor(for: .answering))
     private let yellowLight = TrafficLightDotView(color: WidgetColors.activityColor(for: .waitingForUser))
@@ -553,15 +792,17 @@ final class TrafficLightStatusView: NSView {
     private var isCollapsed = true
     private var lastStatus: CodexActivityStatus = .finished
     private var finishTransitionUntil: Date?
-    private var finishTransitionTimer: Timer?
+    nonisolated(unsafe) private var finishTransitionTimer: Timer?
     private var wakeGreenUntil: Date?
-    private var wakeGreenTimer: Timer?
+    nonisolated(unsafe) private var wakeGreenTimer: Timer?
     private var latestActivity: CodexActivitySnapshot?
+    private var latestCollapsed = true
 
     private enum DisplayStage {
         case active(CodexActivityStatus, needsHumanAttention: Bool)
         case finishing
         case breathingDone
+        case idleExpanded
         case idleCollapsed
     }
 
@@ -576,12 +817,13 @@ final class TrafficLightStatusView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func render(activity: CodexActivitySnapshot) {
+    func render(activity: CodexActivitySnapshot, collapsed: Bool? = nil, animated: Bool = true) {
         latestActivity = activity
-        let collapsed = activity.shouldCollapseToGreenOnly
+        let collapsed = collapsed ?? activity.shouldCollapseToGreenOnly
+        latestCollapsed = collapsed
         let wasCollapsed = isCollapsed
         if collapsed != isCollapsed {
-            setCollapsed(collapsed)
+            setCollapsed(collapsed, animated: animated)
         }
         isCollapsed = collapsed
         if wasCollapsed && !collapsed && activity.status != .finished {
@@ -601,6 +843,11 @@ final class TrafficLightStatusView: NSView {
         if collapsed {
             stopWakeGreenTransition()
             return .idleCollapsed
+        }
+
+        if activity.shouldCollapseToGreenOnly {
+            stopWakeGreenTransition()
+            return .idleExpanded
         }
 
         if activity.status == .finished {
@@ -631,7 +878,7 @@ final class TrafficLightStatusView: NSView {
         case .active(let status, let needsHumanAttention):
             setLights(
                 red: status == .answering,
-                yellow: status == .waitingForUser,
+                yellow: status == .waitingForUser || status == .autoReviewing,
                 green: status == .finished,
                 greenBreathing: false,
                 yellowBlinking: status == .waitingForUser && needsHumanAttention
@@ -650,6 +897,9 @@ final class TrafficLightStatusView: NSView {
 
         case .breathingDone:
             setLights(red: false, yellow: false, green: true, greenBreathing: true, yellowBlinking: false)
+
+        case .idleExpanded:
+            setLights(red: false, yellow: false, green: false, greenBreathing: false, yellowBlinking: false)
 
         case .idleCollapsed:
             setLights(red: false, yellow: false, green: false, greenBreathing: false, yellowBlinking: false)
@@ -710,12 +960,21 @@ final class TrafficLightStatusView: NSView {
         yellowLight.alphaValue = 0
     }
 
-    private func setCollapsed(_ collapsed: Bool) {
+    private func setCollapsed(_ collapsed: Bool, animated: Bool = true) {
         if !collapsed {
             redLight.isHidden = false
             yellowLight.isHidden = false
-            redLight.alphaValue = 0
-            yellowLight.alphaValue = 0
+            redLight.alphaValue = animated ? 0 : 1
+            yellowLight.alphaValue = animated ? 0 : 1
+        }
+
+        guard animated else {
+            redLight.alphaValue = collapsed ? 0 : 1
+            yellowLight.alphaValue = collapsed ? 0 : 1
+            redLight.isHidden = collapsed
+            yellowLight.isHidden = collapsed
+            layoutSubtreeIfNeeded()
+            return
         }
 
         NSAnimationContext.runAnimationGroup { context in
@@ -736,15 +995,17 @@ final class TrafficLightStatusView: NSView {
         finishTransitionTimer?.invalidate()
         redLight.dimToInactive(duration: 0.5)
         finishTransitionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.finishTransitionUntil = nil
-            self.redLight.setBreathing(false)
-            self.redLight.setActive(false, animated: true)
-            self.yellowLight.setActive(false, animated: true)
-            self.yellowLight.setBlinking(false)
-            self.greenLight.setActive(true, animated: true)
-            self.greenLight.setBreathing(false)
-            self.greenLight.setBlinking(false)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.finishTransitionUntil = nil
+                self.redLight.setBreathing(false)
+                self.redLight.setActive(false, animated: true)
+                self.yellowLight.setActive(false, animated: true)
+                self.yellowLight.setBlinking(false)
+                self.greenLight.setActive(true, animated: true)
+                self.greenLight.setBreathing(false)
+                self.greenLight.setBlinking(false)
+            }
         }
         if let finishTransitionTimer {
             RunLoop.main.add(finishTransitionTimer, forMode: .common)
@@ -765,11 +1026,13 @@ final class TrafficLightStatusView: NSView {
         wakeGreenUntil = Date().addingTimeInterval(1.5)
         wakeGreenTimer?.invalidate()
         wakeGreenTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.wakeGreenUntil = nil
-            self.wakeGreenTimer = nil
-            if let latestActivity = self.latestActivity {
-                self.render(activity: latestActivity)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.wakeGreenUntil = nil
+                self.wakeGreenTimer = nil
+                if let latestActivity = self.latestActivity {
+                    self.render(activity: latestActivity, collapsed: self.latestCollapsed)
+                }
             }
         }
         if let wakeGreenTimer {
@@ -796,10 +1059,10 @@ private final class TrafficLightDotView: NSView {
     private var isBlinking = false
     private var breathPhase: CGFloat = 0
     private var blinkPhase: CGFloat = CGFloat.pi / 2
-    private var breathTimer: Timer?
-    private var blinkTimer: Timer?
+    nonisolated(unsafe) private var breathTimer: Timer?
+    nonisolated(unsafe) private var blinkTimer: Timer?
     private var activeLevel: CGFloat = 0
-    private var activeLevelTimer: Timer?
+    nonisolated(unsafe) private var activeLevelTimer: Timer?
 
     init(color: NSColor) {
         self.baseColor = color
@@ -879,9 +1142,11 @@ private final class TrafficLightDotView: NSView {
     private func startBreathing() {
         breathTimer?.invalidate()
         breathTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.breathPhase += 0.085
-            self.needsDisplay = true
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.breathPhase += 0.085
+                self.needsDisplay = true
+            }
         }
         if let breathTimer {
             RunLoop.main.add(breathTimer, forMode: .common)
@@ -898,9 +1163,11 @@ private final class TrafficLightDotView: NSView {
         blinkTimer?.invalidate()
         blinkPhase = CGFloat.pi / 2
         blinkTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.blinkPhase += CGFloat.pi / 15
-            self.needsDisplay = true
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.blinkPhase += CGFloat.pi / 15
+                self.needsDisplay = true
+            }
         }
         if let blinkTimer {
             RunLoop.main.add(blinkTimer, forMode: .common)
@@ -918,18 +1185,20 @@ private final class TrafficLightDotView: NSView {
         let start = activeLevel
         let startedAt = Date()
         activeLevelTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] timer in
-            guard let self else { return }
-            let elapsed = Date().timeIntervalSince(startedAt)
-            let rawProgress = min(1, max(0, CGFloat(elapsed / duration)))
-            let easedProgress = rawProgress * rawProgress * (3 - 2 * rawProgress)
-            self.activeLevel = start + (target - start) * easedProgress
-            self.needsDisplay = true
-
-            if rawProgress >= 1 {
-                timer.invalidate()
-                self.activeLevelTimer = nil
-                self.activeLevel = target
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let rawProgress = min(1, max(0, CGFloat(elapsed / duration)))
+                let easedProgress = rawProgress * rawProgress * (3 - 2 * rawProgress)
+                self.activeLevel = start + (target - start) * easedProgress
                 self.needsDisplay = true
+
+                if rawProgress >= 1 {
+                    self.activeLevelTimer?.invalidate()
+                    self.activeLevelTimer = nil
+                    self.activeLevel = target
+                    self.needsDisplay = true
+                }
             }
         }
         if let activeLevelTimer {
@@ -992,12 +1261,113 @@ final class DotView: NSView {
 }
 
 private enum WidgetFormatter {
+    static func activityLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "Status"
+        case .chinese:
+            return "状态"
+        }
+    }
+
+    static func remainingLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "remaining"
+        case .chinese:
+            return "剩余"
+        }
+    }
+
+    static func aheadUsageLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "Ahead"
+        case .chinese:
+            return "超前"
+        }
+    }
+
+    static func fiveHourQuotaTitle(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "5-hour quota"
+        case .chinese:
+            return "5 小时额度"
+        }
+    }
+
+    static func sevenDayQuotaTitle(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "7-day quota"
+        case .chinese:
+            return "7 天额度"
+        }
+    }
+
+    static func fiveHourResetLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "5-hour reset"
+        case .chinese:
+            return "5 小时重置"
+        }
+    }
+
+    static func sevenDayResetLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "7-day reset"
+        case .chinese:
+            return "7 天重置"
+        }
+    }
+
+    static func latestLogLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "Latest log"
+        case .chinese:
+            return "最新日志"
+        }
+    }
+
+    static func planLabel(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "Plan"
+        case .chinese:
+            return "套餐"
+        }
+    }
+
+    static func noLogDataText(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "No quota data"
+        case .chinese:
+            return "当前日志未提供"
+        }
+    }
+
+    static func noneText(_ language: WidgetLanguage) -> String {
+        switch language {
+        case .english:
+            return "None"
+        case .chinese:
+            return "暂无"
+        }
+    }
+
     static func activityTooltip(_ status: CodexActivityStatus) -> String {
         switch status {
         case .answering:
             return "红灯: Codex 正在回答"
         case .waitingForUser:
             return "黄灯: 等待人来授权或选择执行"
+        case .autoReviewing:
+            return "黄灯: 自动审核中"
         case .finished:
             return "绿灯: Codex 回答完毕"
         case .unknown:
@@ -1005,10 +1375,12 @@ private enum WidgetFormatter {
         }
     }
 
-    static func timeUntilReset(_ date: Date?) -> String {
+    static func timeUntilReset(_ date: Date?, language: WidgetLanguage) -> String {
         guard let date else { return "--" }
         let delta = Int(date.timeIntervalSinceNow)
-        guard delta > 0 else { return "已重置" }
+        guard delta > 0 else {
+            return language == .chinese ? "已重置" : "reset"
+        }
 
         let hours = delta / 3600
         let minutes = (delta % 3600) / 60
@@ -1022,20 +1394,36 @@ private enum WidgetFormatter {
         return "\(minutes)m"
     }
 
-    static func relativeAge(_ date: Date?) -> String {
-        guard let date else { return "未知" }
+    static func absoluteResetTime(_ date: Date?, language: WidgetLanguage) -> String {
+        guard let date else { return "--" }
+        let formatter = DateFormatter()
+        switch language {
+        case .english:
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "MMM d HH:mm"
+        case .chinese:
+            formatter.locale = Locale(identifier: "zh_CN")
+            formatter.dateFormat = "M月d日 HH:mm"
+        }
+        return formatter.string(from: date)
+    }
+
+    static func relativeAge(_ date: Date?, language: WidgetLanguage) -> String {
+        guard let date else {
+            return language == .chinese ? "未知" : "unknown"
+        }
         let delta = max(0, Int(-date.timeIntervalSinceNow))
         if delta < 60 {
-            return "\(delta)s 前"
+            return language == .chinese ? "\(delta)s 前" : "\(delta)s ago"
         }
         let minutes = delta / 60
         if minutes < 60 {
-            return "\(minutes)m 前"
+            return language == .chinese ? "\(minutes)m 前" : "\(minutes)m ago"
         }
         let hours = minutes / 60
         if hours < 24 {
-            return "\(hours)h 前"
+            return language == .chinese ? "\(hours)h 前" : "\(hours)h ago"
         }
-        return "\(hours / 24)d 前"
+        return language == .chinese ? "\(hours / 24)d 前" : "\(hours / 24)d ago"
     }
 }

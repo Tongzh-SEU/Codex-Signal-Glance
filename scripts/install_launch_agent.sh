@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENT_ID="com.wendy.codex-signal-glance"
 PLIST_PATH="$HOME/Library/LaunchAgents/$AGENT_ID.plist"
-APP_HOME="$HOME/.codex-signal-glance"
+APP_HOME="$HOME/.codex-quota-widget"
 INSTALL_BIN="$APP_HOME/bin/CodexSignalGlance"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 UID_VALUE="$(id -u)"
@@ -35,7 +35,8 @@ is_widget_plist() {
     return 0
   fi
 
-  grep -q "CodexSignalGlance" "$plist" 2>/dev/null && grep -q ".codex-signal-glance" "$plist" 2>/dev/null
+  grep -q "CodexSignalGlance" "$plist" 2>/dev/null \
+    && { grep -q ".codex-quota-widget" "$plist" 2>/dev/null || grep -q ".codex-signal-glance" "$plist" 2>/dev/null; }
 }
 
 remove_existing_agents() {
@@ -76,6 +77,7 @@ remove_existing_agents
 mkdir -p "$APP_HOME/bin"
 cp "$ROOT_DIR/bin/CodexSignalGlance" "$INSTALL_BIN"
 chmod +x "$INSTALL_BIN"
+xattr -cr "$INSTALL_BIN" >/dev/null 2>&1 || true
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
 cat > "$PLIST_PATH" <<EOF
@@ -102,6 +104,8 @@ cat > "$PLIST_PATH" <<EOF
 </dict>
 </plist>
 EOF
+chmod 644 "$PLIST_PATH"
+xattr -cr "$PLIST_PATH" >/dev/null 2>&1 || true
 
 "$SCRIPT_DIR/restart_helper.sh"
 

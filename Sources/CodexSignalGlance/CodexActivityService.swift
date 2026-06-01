@@ -119,7 +119,7 @@ final class CodexActivityService: @unchecked Sendable {
         }
 
         if containsAutoReviewSignal(in: payload) {
-            return (.waitingForUser, true, isWaitingForPlanChoice, false, false, false)
+            return (.autoReviewing, true, isWaitingForPlanChoice, false, false, false)
         }
 
         if isToolStartEvent(type: type, payloadType: payloadType, payload: payload) {

@@ -58,42 +58,6 @@ Codex Signal Glance 将这些关键信息带回桌面视野。
 
 ---
 
-## Codex Signal Light
-
-The signal light changes automatically based on what Codex is doing.
-
-| State | Indicator |
-|---------|---------|
-| Idle / Ready | 🟢 Green |
-| Reasoning | 🟡 Yellow |
-| Generating Final Response | 🟡 Yellow |
-| Waiting For Approval | 🟡 Blinking Yellow |
-| Waiting For Plan Selection | 🟡 Blinking Yellow |
-| Calling Tools | 🔴 Red |
-| Writing Code | 🔴 Red |
-| Task Completed | 🟢 Green |
-
-This allows you to understand Codex activity at a glance without constantly switching back to the Codex window.
-
-## Codex Signal Light（状态灯）
-
-状态灯会根据 Codex 当前执行阶段自动变化。
-
-| 状态 | 指示灯 |
-|---------|---------|
-| 空闲 / 就绪 | 🟢 绿色 |
-| 推理中 | 🟡 黄色 |
-| 生成最终回复 | 🟡 黄色 |
-| 等待批准 | 🟡 黄色闪烁 |
-| 等待方案选择 | 🟡 黄色闪烁 |
-| 调用工具 | 🔴 红色 |
-| 编写代码 | 🔴 红色 |
-| 任务完成 | 🟢 绿色 |
-
-无需频繁切回 Codex 窗口，也能快速了解当前执行状态。
-
----
-
 
 ## Install
 
@@ -156,6 +120,42 @@ This removes the LaunchAgent and stops the helper.
 ```
 
 该命令会移除 LaunchAgent 并停止运行中的 helper。
+---
+
+
+## Codex Signal Light
+
+The signal light changes automatically based on what Codex is doing.
+
+| State | Indicator |
+|---------|---------|
+| Idle / Ready | 🟢 Green |
+| Reasoning | 🟡 Yellow |
+| Generating Final Response | 🟡 Yellow |
+| Waiting For Approval | 🟡 Blinking Yellow |
+| Waiting For Plan Selection | 🟡 Blinking Yellow |
+| Calling Tools | 🔴 Red |
+| Writing Code | 🔴 Red |
+| Task Completed | 🟢 Green |
+
+This allows you to understand Codex activity at a glance without constantly switching back to the Codex window.
+
+## Codex Signal Light（状态灯）
+
+状态灯会根据 Codex 当前执行阶段自动变化。
+
+| 状态 | 指示灯 |
+|---------|---------|
+| 空闲 / 就绪 | 🟢 绿色 |
+| 推理中 | 🟡 黄色 |
+| 生成最终回复 | 🟡 黄色 |
+| 等待批准 | 🟡 黄色闪烁 |
+| 等待方案选择 | 🟡 黄色闪烁 |
+| 调用工具 | 🔴 红色 |
+| 编写代码 | 🔴 红色 |
+| 任务完成 | 🟢 绿色 |
+
+无需频繁切回 Codex 窗口，也能快速了解当前执行状态。
 
 ---
 

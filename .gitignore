@@ -1,0 +1,4 @@
+.build/
+.build-cache/
+.build-home/
+bin/

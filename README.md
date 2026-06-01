@@ -87,7 +87,13 @@ After installation:
 ./scripts/uninstall_launch_agent.sh
 ```
 
-This removes the LaunchAgent and stops the helper.
+This stops the helper and removes Codex Signal Glance files, including:
+
+- user-level LaunchAgent
+- `~/.codex-quota-widget`
+- legacy `~/.codex-signal-glance`
+- legacy `~/Applications/Codex Signal Glance.app` if it exists
+- legacy Login Item entries if they exist
 
 ## 安装使用
 
@@ -97,14 +103,12 @@ This removes the LaunchAgent and stops the helper.
 ./scripts/install_launch_agent.sh
 ```
 
-```md
 该脚本会：
 
 - 编译并安装原生 helper。
 - 将程序复制到 `~/.codex-quota-widget/bin`。
 - 安装用户级 LaunchAgent。
 - 立即启动 helper。
-```
 
 安装完成后：
 
@@ -119,7 +123,13 @@ This removes the LaunchAgent and stops the helper.
 ./scripts/uninstall_launch_agent.sh
 ```
 
-该命令会移除 LaunchAgent 并停止运行中的 helper。
+该命令会停止 helper，并清理 Codex Signal Glance 相关文件，包括：
+
+- 用户级 LaunchAgent
+- `~/.codex-quota-widget`
+- 旧版 `~/.codex-signal-glance`
+- 如果存在，旧版 `~/Applications/Codex Signal Glance.app`
+- 如果存在，旧版登录项
 
 ---
 

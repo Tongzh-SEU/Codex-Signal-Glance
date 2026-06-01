@@ -19,7 +19,7 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
     init(stateStore: WidgetStateStore) {
         self.stateStore = stateStore
         self.window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 174, height: 34),
+            contentRect: NSRect(x: 0, y: 0, width: 202, height: 34),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -64,8 +64,12 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) {
+        guard hasPlacedWindow else {
+            return
+        }
         let frame = window.frame
-        stateStore.save(WidgetState(originX: frame.origin.x, originY: frame.origin.y))
+        let state = stateStore.load()
+        stateStore.save(WidgetState(originX: frame.origin.x, originY: frame.origin.y, language: state.language))
     }
 
     private func setupWindow() {
@@ -103,14 +107,14 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
         heightConstraint = contentView.heightAnchor.constraint(equalToConstant: currentSize.height)
         widthConstraint?.isActive = true
         heightConstraint?.isActive = true
-
-        applySize()
     }
 
     private func restoreInitialPlacement() {
         let state = stateStore.load()
         if let x = state.originX, let y = state.originY {
-            window.setFrameOrigin(clampedOrigin(for: NSPoint(x: x, y: y), size: currentSize))
+            let savedOrigin = NSPoint(x: x, y: y)
+            let restoredOrigin = clampedOrigin(for: savedOrigin, size: currentSize)
+            window.setFrame(NSRect(origin: restoredOrigin, size: currentSize), display: false)
         } else {
             let frame = defaultFrame(for: currentSize)
             window.setFrame(frame, display: false)
@@ -120,9 +124,9 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
 
     private var currentSize: NSSize {
         if isExpanded {
-            return NSSize(width: 333, height: 196)
+            return NSSize(width: 312, height: 196)
         }
-        return isActivityCollapsed ? NSSize(width: 174, height: 34) : NSSize(width: 250, height: 34)
+        return isActivityCollapsed ? NSSize(width: 194, height: 34) : NSSize(width: 250, height: 34)
     }
 
     private func applySize(animated: Bool = true) {
@@ -141,8 +145,8 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
     private func defaultFrame(for size: NSSize) -> NSRect {
         let screen = NSScreen.main ?? NSScreen.screens.first!
         let visible = screen.visibleFrame
-        let x = visible.maxX - size.width - 18
-        let y = visible.maxY - size.height - 26
+        let x = visible.minX + 18
+        let y = visible.minY + 26
         return NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 
@@ -381,8 +385,8 @@ private final class WidgetContentView: NSView {
 
     private func updateCollapsedLayout(collapsed: Bool, animated: Bool = true) {
         let targetWidth: CGFloat = collapsed ? 15 : 62
-        let targetQuotaWidth: CGFloat = collapsed ? 60 : 66
-        let targetInset: CGFloat = collapsed ? 6 : 16
+        let targetQuotaWidth: CGFloat = collapsed ? 64 : 66
+        let targetInset: CGFloat = collapsed ? 8 : 16
         let targetSpacing: CGFloat = collapsed ? 5 : 7
         let changed = activityWidthConstraint?.constant != targetWidth
             || primaryWidthConstraint?.constant != targetQuotaWidth
@@ -691,9 +695,9 @@ private final class DetailQuotaRowView: NSView {
             heightAnchor.constraint(equalToConstant: 36),
             percentLabel.widthAnchor.constraint(equalToConstant: 44),
             paceLabel.widthAnchor.constraint(equalToConstant: 80),
-            barView.widthAnchor.constraint(equalToConstant: 214),
+            barView.widthAnchor.constraint(equalToConstant: 198),
             barView.heightAnchor.constraint(equalToConstant: 12),
-            usageLabel.widthAnchor.constraint(equalToConstant: 75),
+            usageLabel.widthAnchor.constraint(equalToConstant: 68),
             headerStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
             barStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -1300,9 +1304,9 @@ private enum WidgetFormatter {
     static func sevenDayQuotaTitle(_ language: WidgetLanguage) -> String {
         switch language {
         case .english:
-            return "7-day quota"
+            return "7-day quota "
         case .chinese:
-            return "7 天额度"
+            return "7 天额度  "
         }
     }
 

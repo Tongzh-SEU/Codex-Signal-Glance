@@ -3,7 +3,18 @@ set -euo pipefail
 
 AGENT_ID_PREFIX="com.wendy.codex-signal-glance"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
-APP_HOME_PREFIX="$HOME/.codex-quota-widget"
+APP_HOME_PREFIXES=(
+  "$HOME/.codex-quota-widget"
+  "$HOME/.codex-signal-glance"
+)
+APP_BUNDLES=(
+  "$HOME/Applications/Codex Signal Glance.app"
+  "$HOME/.codex-signal-glance/CodexSignalGlance.app"
+)
+LOGIN_ITEM_NAMES=(
+  "Codex Signal Glance"
+  "CodexSignalGlance"
+)
 UID_VALUE="$(id -u)"
 DOMAIN="gui/$UID_VALUE"
 PLIST_BUDDY="/usr/libexec/PlistBuddy"
@@ -32,7 +43,33 @@ is_widget_plist() {
   fi
 
   grep -q "CodexSignalGlance" "$plist" 2>/dev/null \
-    && { grep -q ".codex-quota-widget" "$plist" 2>/dev/null || grep -q ".codex-signal-glance" "$plist" 2>/dev/null; }
+    && { grep -q ".codex-quota-widget" "$plist" 2>/dev/null || grep -q ".codex-signal-glance" "$plist" 2>/dev/null || grep -q "Codex Signal Glance.app" "$plist" 2>/dev/null; }
+}
+
+remove_login_items() {
+  local name app
+
+  for name in "${LOGIN_ITEM_NAMES[@]}"; do
+    osascript <<EOF >/dev/null 2>&1 || true
+tell application "System Events"
+  if exists login item "$name" then
+    delete login item "$name"
+  end if
+end tell
+EOF
+  done
+
+  for app in "${APP_BUNDLES[@]}"; do
+    osascript <<EOF >/dev/null 2>&1 || true
+tell application "System Events"
+  repeat with itemRef in (get login items)
+    if (path of itemRef is "$app") then
+      delete itemRef
+    end if
+  end repeat
+end tell
+EOF
+  done
 }
 
 typeset -A seen_plists
@@ -46,7 +83,7 @@ for plist in "$LAUNCH_AGENTS_DIR"/"$AGENT_ID_PREFIX"*.plist(N) "$LAUNCH_AGENTS_D
 done
 
 if [[ ${#plists[@]} -eq 0 ]]; then
-  echo "No Codex Quota Widget LaunchAgents found."
+  echo "No Codex Signal Glance LaunchAgents found."
 else
   for plist in "${plists[@]}"; do
     label="$(plist_label "$plist")"
@@ -56,20 +93,31 @@ else
     launchctl bootout "$DOMAIN" "$plist" >/dev/null 2>&1 || true
     launchctl unload "$plist" >/dev/null 2>&1 || true
 
+    if [[ -n "$program" && "$(basename "$program")" == "CodexSignalGlance" ]]; then
+      pkill -f "$program" >/dev/null 2>&1 || true
+    fi
+
     rm -f "$plist"
     echo "Removed LaunchAgent: $plist"
-
-    if [[ "$program" == "$APP_HOME_PREFIX"* && "$(basename "$program")" == "CodexSignalGlance" ]]; then
-      rm -f "$program"
-      rmdir "$(dirname "$program")" >/dev/null 2>&1 || true
-      rmdir "$(dirname "$(dirname "$program")")" >/dev/null 2>&1 || true
-    fi
   done
 fi
 
-for app_home in "$APP_HOME_PREFIX"*(N-/); do
-  rm -rf "$app_home"
-  echo "Removed install directory: $app_home"
+remove_login_items
+
+for app in "${APP_BUNDLES[@]}"; do
+  pkill -f "$app/Contents/MacOS/CodexSignalGlance" >/dev/null 2>&1 || true
+  if [[ -d "$app" ]]; then
+    rm -rf "$app"
+    echo "Removed app: $app"
+  fi
 done
 
-pkill -f "$APP_HOME_PREFIX.*/CodexSignalGlance" >/dev/null 2>&1 || true
+for app_home in "${APP_HOME_PREFIXES[@]}"; do
+  pkill -f "$app_home.*/CodexSignalGlance" >/dev/null 2>&1 || true
+  if [[ -d "$app_home" ]]; then
+    rm -rf "$app_home"
+    echo "Removed install directory: $app_home"
+  fi
+done
+
+echo "Uninstalled Codex Signal Glance."

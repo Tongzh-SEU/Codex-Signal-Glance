@@ -8,7 +8,7 @@
 >
 >Codex Signal Glance 是一款 macOS 桌面常驻工具。作为登录项运行，它会将 Codex 的运行状态与剩余额度持续呈现在桌面上，让你无需切换窗口，始终掌握进展。
 
-![Codex Quota Widget floating capsule mockup](img.png)
+![Codex Quota Widget floating capsule mockup](image/img.png)
 
 ## What It Does
 

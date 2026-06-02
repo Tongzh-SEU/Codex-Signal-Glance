@@ -171,7 +171,7 @@ final class CodexActivityService: @unchecked Sendable {
             switch payloadType {
             case "function_call":
                 let needsUser = functionCallNeedsUser(payload)
-                return (needsUser ? .waitingForUser : .answering, true, false, false, true, needsUser, false)
+                return (needsUser ? .waitingForUser : .answering, true, needsUser, false, true, needsUser, false)
             case "function_call_output", "custom_tool_call_output":
                 return (.answering, true, false, false, true, false, false)
             case "reasoning":
